@@ -8,6 +8,11 @@ The JRuby safe is a clone of [jruby-sandbox](https://github.com/omghax/jruby-san
 To build the JRuby extension, run `rake compile`. This will build the
 `lib/sandbox/sandbox.jar` file, which `lib/sandbox.rb` loads.
 
+## Testing
+
+    bundle install --path vendor/bundle
+    bundle exec rake spec
+
 ## Basic Usage
 
 Sandbox gives you a self-contained JRuby interpreter in which to eval
