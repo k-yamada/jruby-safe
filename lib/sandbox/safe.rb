@@ -21,7 +21,7 @@ module Sandbox
       keep_methods(:String, STRING_METHODS)
 
       Kernel.class_eval do
-        def `(*args)
+        def `(*args) # `<- fix highlight by editor
           raise NoMethodError, "` is unavailable"
         end
 
@@ -77,7 +77,9 @@ module Sandbox
     end
 
     def eval(code, options={})
-      if seconds = options[:timeout]
+      if options.is_a?(Binding)
+        eval_with_binding(code, options)
+      elsif seconds = options[:timeout]
         sandbox_timeout(code, seconds) do
           super code
         end

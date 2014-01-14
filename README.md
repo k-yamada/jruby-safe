@@ -10,8 +10,8 @@ To build the JRuby extension, run `rake compile`. This will build the
 
 ## Testing
 
-    bundle install --path vendor/bundle
-    bundle exec rake spec
+    $ bundle install --path vendor/bundle
+    $ bundle exec rake spec
 
 ## Basic Usage
 

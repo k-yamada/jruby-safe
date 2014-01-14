@@ -5,6 +5,7 @@ import java.util.Map;
 
 import org.jruby.Ruby;
 import org.jruby.RubyClass;
+import org.jruby.RubyBinding;
 import org.jruby.RubyInstanceConfig;
 import org.jruby.RubyKernel;
 import org.jruby.RubyModule;
@@ -14,6 +15,7 @@ import org.jruby.anno.JRubyClass;
 import org.jruby.anno.JRubyMethod;
 import org.jruby.internal.runtime.methods.DynamicMethod;
 import org.jruby.runtime.Block;
+import org.jruby.runtime.Binding;
 import org.jruby.runtime.ObjectAllocator;
 import org.jruby.runtime.builtin.IRubyObject;
 import org.jruby.common.IRubyWarnings;
@@ -58,10 +60,47 @@ public class SandboxFull extends RubyObject {
     return this;
   }
 
+  private static abstract class EvalBinding {
+    public abstract Binding convertToBinding(IRubyObject scope);
+  }
+
+  private static EvalBinding evalBinding19 = new EvalBinding() {
+    @Override
+    public Binding convertToBinding(IRubyObject scope) {
+      if (scope instanceof RubyBinding) {
+        return ((RubyBinding)scope).getBinding().cloneForEval();
+      } else {
+        throw scope.getRuntime().newTypeError("wrong argument type " + scope.getMetaClass() + " (expected Binding)");
+      }
+    }
+  };
+
   @JRubyMethod(required=1)
   public IRubyObject eval(IRubyObject str) {
     try {
       IRubyObject result = wrapped.evalScriptlet(str.asJavaString(), currentScope);
+      return unbox(result);
+    } catch (RaiseException e) {
+      String msg = e.getException().callMethod(wrapped.getCurrentContext(), "message").asJavaString();
+      String path = e.getException().type().getName();
+      RubyClass eSandboxException = (RubyClass) getRuntime().getClassFromPath("Sandbox::SandboxException");
+      throw new RaiseException(getRuntime(), eSandboxException, path + ": " + msg, false);
+    } catch (Exception e) {
+      e.printStackTrace();
+      getRuntime().getWarnings().warn(IRubyWarnings.ID.MISCELLANEOUS, "NativeException: " + e);
+      return getRuntime().getNil();
+    }
+  }
+
+  @JRubyMethod(required=2)
+  public IRubyObject eval_with_binding(IRubyObject str, IRubyObject argBinding) {
+    try {
+      //IRubyObject result = wrapped.evalScriptlet(str.asJavaString());
+      //boolean bindingGiven = args.length > 1 && !args[1].isNil();
+      //Binding binding = bindingGiven ? evalBinding.convertToBinding(args[1]) : context.currentBinding();
+      Binding binding = evalBinding19.convertToBinding(argBinding);
+      DynamicScope scope = binding.getEvalScope(getRuntime());
+      IRubyObject result = wrapped.evalScriptlet(str.asJavaString(), scope);
       return unbox(result);
     } catch (RaiseException e) {
       String msg = e.getException().callMethod(wrapped.getCurrentContext(), "message").asJavaString();
@@ -116,29 +155,29 @@ public class SandboxFull extends RubyObject {
           // superclasses as well.
           sup = importClassPath(runtimeModule.getSuperClass().getName(), true);
         }
-        
+
         RubyClass klass = (RubyClass) sup;
         if (wrappedModule == wrapped.getObject()) {
-          
+
           if (link || runtimeModule instanceof RubyClass) { // if this is a ref and not an import
             wrappedModule = wrapped.defineClass(name, klass, klass.getAllocator());
           } else {
             wrappedModule = wrapped.defineModule(name);
           }
-          
+
         } else {
           if (runtimeModule instanceof RubyClass) {
             wrappedModule = wrappedModule.defineClassUnder(name, klass, klass.getAllocator());
           } else {
             wrappedModule = wrappedModule.defineModuleUnder(name);
           }
-          
+
         }
       } else {
         // ...or just resolve it, if it was already known
         wrappedModule = (RubyModule) wrappedModule.getConstantAt(name);
       }
-      
+
       // Check the consistency of the hierarchy
       if (runtimeModule instanceof RubyClass) {
         if (!link && !runtimeModule.getSuperClass().getName().equals(wrappedModule.getSuperClass().getName())) {

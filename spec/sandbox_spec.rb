@@ -15,6 +15,7 @@ describe Sandbox do
   end
 
   describe ".safe" do
+
     subject { Sandbox.safe }
 
     it { should be_an_instance_of(Sandbox::Safe) }
@@ -56,6 +57,54 @@ describe Sandbox do
       expect {
         subject.eval(%{FileUtils.cp("/bar.txt", "/baz.txt")})
       }.to_not raise_error(Sandbox::SandboxException, /NoMethodError/)
+    end
+
+    context "eval_with_binding" do
+      let(:b) { binding }
+
+      it "should not lock down until calling activate!" do
+        subject.eval(%|`echo hello`|, b).should == "hello\n"
+
+        subject.activate!
+
+        expect {
+          subject.eval(%|`echo hello`|, b)
+        }.to raise_error(Sandbox::SandboxException)
+      end
+
+      it "should activate FakeFS inside the sandbox (and not allow it to be deactivated)" do
+        subject.eval(%|File|, b).should == ::File
+
+        subject.activate!
+
+        foo = File.join(File.dirname(__FILE__), "support", "foo.txt")
+
+        expect {
+          subject.eval(%{File.read("#{foo}")}, b)
+        }.to raise_error(Sandbox::SandboxException, /Errno::ENOENT: No such file or directory/)
+
+        subject.eval(%|File|, b).should == FakeFS::File
+        subject.eval(%|Dir|, b).should == FakeFS::Dir
+        subject.eval(%|FileUtils|, b).should == FakeFS::FileUtils
+        subject.eval(%|FileTest|, b).should == FakeFS::FileTest
+
+        subject.eval(%{FakeFS.deactivate!}, b)
+
+        expect {
+          subject.eval(%{File.read("#{foo}")}, b)
+        }.to raise_error(Sandbox::SandboxException, /Errno::ENOENT: No such file or directory/)
+
+        subject.eval(%{File.open("/bar.txt", "w") {|file| file << "bar" }}, b)
+
+        expect {
+          subject.eval(%{FileUtils.cp("/bar.txt", "/baz.txt")}, b)
+        }.to_not raise_error(Sandbox::SandboxException, /NoMethodError/)
+      end
+
+      it "can set and use local variable" do
+        b["x"] = 4
+        subject.eval("x", b).should == 4
+      end
     end
   end
 

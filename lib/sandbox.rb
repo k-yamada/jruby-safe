@@ -1,3 +1,4 @@
+require "sandbox/binding"
 require "sandbox/sandbox"
 require "sandbox/version"
 require "sandbox/safe"
